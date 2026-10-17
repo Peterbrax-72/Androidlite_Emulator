@@ -1,0 +1,54 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        # Tests that need QEMU are skipped on the runner, which has no QEMU.
+        # Window tests use the runner's desktop. Window tests that need a Linux
+        # display are skipped there.
+        run: python -m unittest discover -s tests -v
+
+  build:
+    name: Build AndroidLite.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build with PyInstaller
+        shell: cmd
+        run: build.bat
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$h  $($_.Name)" | Out-File -FilePath "dist/$($_.BaseName).sha256" -Encoding ascii
+          }
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidLite-windows
+          path: |
+            dist/AndroidLite.exe
+            dist/AndroidLite-cli.exe
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30

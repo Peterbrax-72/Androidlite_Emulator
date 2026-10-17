@@ -1,0 +1,30 @@
+# Build output
+dist/
+build/
+*.spec
+*.msix
+*.appx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local data and VM files: never commit these
+*.iso
+*.img
+*.qcow2
+*.ppm
+*.log
+settings.json
+instances.json
+instances/
+macros/
+keymap.json
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

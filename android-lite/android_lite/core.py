@@ -327,9 +327,26 @@ def start_instance(p: dict, s: dict, inst: dict, *, install: bool = False,
     ensure_shared(r["shared"])
     qemu_log = os.path.join(p["logs"], f"qemu-{inst['id']}.log")
     # Headless: the viewer window shows the screen, so QEMU gets no window of its own.
-    return run_vm(qemu, qemu_log, disk_path=r["disk"], ram_mb=inst["ram_mb"], cpus=inst["cpus"],
-                  iso=iso, shared_dir=r["shared"], display="none", on_start=on_start,
-                  name=f"'{inst['name']}'")
+    rc = run_vm(qemu, qemu_log, disk_path=r["disk"], ram_mb=inst["ram_mb"], cpus=inst["cpus"],
+                iso=iso, shared_dir=r["shared"], display="none", on_start=on_start,
+                name=f"'{inst['name']}'")
+    if install:
+        mark_installed(r["folder"])
+    return rc
+
+
+INSTALLED_MARK = "installed.txt"
+
+
+def mark_installed(folder: str) -> None:
+    """Remember that the Android installer has been run for this instance."""
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, INSTALLED_MARK), "w", encoding="utf-8") as f:
+        f.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+
+
+def is_installed(folder: str) -> bool:
+    return os.path.isfile(os.path.join(folder, INSTALLED_MARK))
 
 
 # ---------- control of a running VM (works from any process) -----------------

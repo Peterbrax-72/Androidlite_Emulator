@@ -1,8 +1,10 @@
 # Android Lite 1.2
 
-A lightweight Windows 11 app for running Android 9 (Android-x86) in QEMU, accelerated by the Windows Hypervisor Platform (WHPX). It manages several Android instances, each with its own apps and data, in the LDPlayer style.
+A lightweight Windows 11 app for running Android 9 (Android-x86) in QEMU, accelerated by the Windows Hypervisor Platform (WHPX). You can run several Android instances, each with its own apps and data.
 
-![Instance manager](docs/screenshots/ui-03-instance-manager.png)
+![Home tab, Android ready](docs/screenshots/ui-05-home-ready.png)
+
+The app has two tabs. **Home** is for everyday use: one button opens Android, and tiles add apps or show help. **Advanced** is the full instance manager for running several copies of Android (see the [Advanced tab screenshot](docs/screenshots/ui-03-advanced-tab.png)).
 
 Each control is explained in [docs/UI_REFERENCE.md](docs/UI_REFERENCE.md).
 
@@ -10,9 +12,10 @@ Each control is explained in [docs/UI_REFERENCE.md](docs/UI_REFERENCE.md).
 
 Each running instance opens in its own window. The window shows the Android screen and sends your mouse and keyboard to it. The app does not use a separate emulator window.
 
-| LDPlayer feature | Android Lite 1.2 | Notes |
+| Feature | Status | Notes |
 |---|---|---|
-| Multi-instance manager | Yes | New, clone, edit, remove. Each instance has its own disk and shared folder. |
+| Home tab | Yes | Guided setup, then an "Open Android" button. Tiles for installing an APK, Google Play steps, screenshots, the shared folder and help. |
+| Multi-instance manager | Yes | On the Advanced tab: new, clone, edit, remove. Each instance has its own disk and shared folder. |
 | Clone instance | Yes | Copies the disk, so apps and logins carry over. All-zero 1 MB blocks are skipped. |
 | Per-instance RAM and vCPUs | Yes | RAM 1–16 GB, vCPUs 1–16. |
 | Lite profile | Yes | 1.5 GB per instance. Lite is the default below 8 GB of host RAM. |
@@ -79,9 +82,10 @@ The MSIX script builds the exe, stages the package, stamps version and publisher
 
 ## First run
 
-1. Open the app and click **Set up**. This installs QEMU for your user (no admin rights) and downloads the ISO.
-2. Select **Android 1** and click **Install Android**. The window opens. In the Android-x86 menu: Installation, create a partition, ext4, install GRUB, reboot.
-3. Click **Start**. For more accounts or games, click **New instance** or **Clone** after installing once.
+1. Open the app. On the Home tab, click **Set up now**. This installs QEMU for your user (no admin rights) and downloads the Android image (about 1 GB).
+2. Click **Install Android**. The steps dialog explains the installer; then click **Start the installer**. In the Android-x86 installer: Installation, create a partition, ext4, install GRUB, reboot. Choose Power off at the end, then click **Stop Android**. The installer steps are written from Android-x86's menus and have not been walked through on Windows.
+3. Click **Open Android**. Later, the same button shows Android's window. Use the tiles to install an `.apk` file or to read the Google Play steps.
+4. For more copies of Android (separate accounts or games), use the Advanced tab: **New instance** or **Clone** after installing once.
 
 ## Input and the window
 
@@ -94,7 +98,7 @@ The MSIX script builds the exe, stages the package, stamps version and publisher
 
 ## Google Play
 
-Android-x86 ships without Google services. Install a GApps package (for example MindTheGapps; match it to Android 9 x86_64) inside each instance. This is manual, and I have not verified the procedure for this build. Some apps check Play Integrity and may refuse to run in a VM; the app does not try to get around those checks.
+Android-x86 ships without Google services. Install a GApps package (for example MindTheGapps; match it to Android 9 x86_64) inside each instance. This is manual, and I have not verified the procedure for this build. The **Google Play** tile on the Home tab shows the steps, and its shared-folder button opens the folder you copy the package into. The app does not automate installing the package. Some apps check Play Integrity and may refuse to run in a VM; the app does not try to get around those checks.
 
 ## Disk and memory
 
@@ -104,11 +108,11 @@ Android-x86 ships without Google services. Install a GApps package (for example 
 
 ## Verified in this sandbox
 
-Linux, QEMU 10.0.13, software emulation (no WHPX here). The tests are in `tests/`: `test_core.py` (26) and `test_features.py` (23). Run them with `python -m unittest discover -s tests -v`.
+Linux, QEMU 10.0.13, software emulation (no WHPX here). The tests are in `tests/`: `test_core.py` (26) and `test_features.py` (29). Run them with `python -m unittest discover -s tests -v`.
 
-- 49 of 49 tests pass. This includes a real VM test: it starts QEMU headless with the app's device set and a shared-folder drive, pauses and resumes it, takes a PNG screenshot, and force-stops it.
+- 55 of 55 tests pass. This includes a real VM test: it starts QEMU headless with the app's device set and a shared-folder drive, pauses and resumes it, takes a PNG screenshot, and force-stops it. The newer tests cover the Home tab's states, the short viewer toolbar (Fullscreen and Screenshot, with the rest under More), and the installed marker.
 - End-to-end input: the app's window sent an F12 keypress through its keyboard handler to a live VM. The guest screen changed (SeaBIOS's boot menu, then iPXE), and the window showed the result.
-- The main window's Start button launched an instance, and the window opened with live frames. The Synchronizer button toggled and the log reported it. Screenshot: `docs/screenshots/ui-04-instance-window.png`.
+- The Home tab's Open Android button launched an instance, and the window opened with live frames while the Home tab showed "Android is running". Screenshot: `docs/screenshots/ui-04-android-window.png`. The Synchronizer button toggled and the log reported it.
 - Not tested: mouse taps, macros, and synchronized input against a running Android. The sandbox boot was too slow to reach the home screen.
 - An earlier single-instance build booted the Android-x86 9.0-r2 ISO to the GRUB menu and to Android's root console.
 
@@ -116,6 +120,7 @@ Linux, QEMU 10.0.13, software emulation (no WHPX here). The tests are in `tests/
 
 - Everything on Windows: WHPX, the silent QEMU installer, sparse disks on NTFS, the `--windowed` exe, and the MSIX.
 - Whether the volume and mute keys change the sound level inside Android-x86. They are sent as standard media keys.
+- The Home tab's guided install and Google Play steps, end to end, including the ~10-minute estimate shown in the install dialog. The Android-x86 installer menus were not walked through here.
 - Keymapping, Synchronizer and macros against an Android home screen. The sandbox boot was too slow to reach it, so these were checked only at the level of the keys and taps sent to the guest.
 - Whether Android mounts the shared folder as USB storage, and whether the APK installer in Android's Files app picks it up.
 - The ISO's SHA256. No official value was found, so none is enforced. Set `iso_sha256` in settings to enforce one.
@@ -133,7 +138,7 @@ android_lite/vmio.py       input events, per-VM sender thread, key mapping to QE
 android_lite/viewer.py     the instance window: screen, keys, touch, keymap, macros
 android_lite/automation.py keymap and macro storage, recorder
 android_lite/disk.py       sparse raw disks (stdlib, ctypes for NTFS)
-android_lite/gui.py        Tkinter instance manager
+android_lite/gui.py        Tkinter UI: Home tab and Advanced tab (instance manager)
 android_lite/cli.py        command-line subcommands
 tests/                     test_core.py, test_features.py
 build.bat, packaging/      Windows build and MSIX

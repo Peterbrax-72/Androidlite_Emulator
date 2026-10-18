@@ -112,6 +112,67 @@ class InstanceDialog(tk.Toplevel):
         self.destroy()
 
 
+INSTALL_STEPS = [
+    "A window opens with the Android installer. Use the arrow keys and Enter, or click with the mouse.",
+    "Choose 'Installation' (install Android-x86 to the hard disk).",
+    "Choose 'Create/Modify partitions'. Pick 'New', then 'Primary'. Keep the full size, mark it 'Bootable', "
+    "choose 'Write', type 'yes', then 'Quit'.",
+    "Select the new partition and format it as ext4. Answer 'yes' to any warning.",
+    "When asked to install the boot loader (GRUB), choose 'yes'.",
+    "If asked about making the system folder read-write, choose 'yes'. You need this later for Google Play.",
+    "When the installer finishes, choose 'Power off' (not reboot). Then click Stop Android on the Home tab.",
+]
+
+PLAY_STEPS = [
+    "Android-x86 does not include Google Play. Adding it is a separate step.",
+    "Download a Google Apps package for Android 9 (x86_64), such as MindTheGapps, from its official site. "
+    "Keep the .zip file.",
+    "Click 'Open the shared folder' below and copy the .zip into it. Android sees this folder as USB storage.",
+    "Installing the package needs a root shell inside Android and a restart. Android Lite does not automate "
+    "this yet, and it has not been tested on Windows.",
+]
+
+HELP_STEPS = [
+    "Set up once: click 'Set up now'. The app downloads what it needs.",
+    "Install Android once: click 'Install Android' and follow the installer steps.",
+    "Open Android: it opens in its own window. Click and drag to tap and swipe. Type with the keyboard.",
+    "Add apps: install an .apk file with 'Install an app from a file', or add Google Play (see that tile).",
+    "Screenshots: use the Screenshot tile, or the Screenshot button in the Android window.",
+    "The Advanced tab holds extra copies of Android, cloning, pausing, keymaps, macros, and the log.",
+]
+
+
+class StepsDialog(tk.Toplevel):
+    """A plain-language numbered list with an optional action button."""
+
+    def __init__(self, master, title: str, heading: str, steps: list[str], action: str | None = None,
+                 on_action=None):
+        super().__init__(master)
+        self.title(title)
+        self.configure(bg=BG)
+        self.transient(master)
+        self.resizable(False, False)
+        tk.Label(self, text=heading, font=("Segoe UI", 14, "bold"), fg=FG, bg=BG, anchor="w",
+                 justify="left", wraplength=580).pack(fill="x", padx=22, pady=(18, 8))
+        for i, step in enumerate(steps, 1):
+            row = tk.Frame(self, bg=BG)
+            row.pack(fill="x", padx=22, pady=4)
+            tk.Label(row, text=str(i), font=UI_BOLD, fg="#0b0c0e", bg=GREEN, width=2).pack(side="left", anchor="n")
+            tk.Label(row, text=step, font=UI_FONT, fg=FG, bg=BG, anchor="w", justify="left",
+                     wraplength=530).pack(side="left", padx=12, fill="x")
+        btns = tk.Frame(self, bg=BG)
+        btns.pack(fill="x", padx=22, pady=18)
+        if action and on_action:
+            tk.Button(btns, text=action, font=UI_BOLD, bg=GREEN, fg="#0b0c0e", activebackground=GREEN,
+                      relief="flat", padx=16, pady=6, command=lambda: self._go(on_action)).pack(side="left")
+        tk.Button(btns, text="Close", font=UI_FONT, bg=CARD, fg=FG, activebackground=BG, relief="flat",
+                  padx=16, pady=6, command=self.destroy).pack(side="right")
+
+    def _go(self, fn):
+        self.destroy()
+        fn()
+
+
 class App(tk.Tk):
     def __init__(self, p: dict | None = None):
         super().__init__()
@@ -161,9 +222,13 @@ class App(tk.Tk):
                      bordercolor=CARD, rowheight=26, font=UI_FONT)
         st.configure("Treeview.Heading", background=BG, foreground=MUTED, relief="flat", font=UI_BOLD)
         st.map("Treeview", background=[("selected", "#2f5b45")], foreground=[("selected", FG)])
+        st.configure("TNotebook", background=BG, borderwidth=0)
+        st.configure("TNotebook.Tab", background=CARD, foreground=MUTED, padding=(18, 7), font=UI_BOLD,
+                     borderwidth=0)
+        st.map("TNotebook.Tab", background=[("selected", BG)], foreground=[("selected", FG)])
 
     def _card(self, title: str, expand: bool = False) -> tk.Frame:
-        outer = tk.Frame(self, bg=BG)
+        outer = tk.Frame(self.body, bg=BG)
         outer.pack(fill="both" if expand else "x", padx=16, pady=6, expand=expand)
         tk.Label(outer, text=title.upper(), font=("Segoe UI", 8, "bold"), fg=MUTED, bg=BG).pack(anchor="w", padx=4)
         inner = tk.Frame(outer, bg=CARD, padx=12, pady=8)
@@ -172,11 +237,76 @@ class App(tk.Tk):
 
     def _build(self):
         head = tk.Frame(self, bg=BG)
-        head.pack(fill="x", padx=16, pady=(14, 4))
+        head.pack(fill="x", padx=16, pady=(14, 2))
         tk.Label(head, text="Android Lite", font=TITLE_FONT, fg=FG, bg=BG).pack(anchor="w")
-        tk.Label(head, text="Android 9 (x86-64) instances on QEMU, accelerated by Windows Hypervisor Platform",
-                 font=UI_FONT, fg=MUTED, bg=BG).pack(anchor="w")
+        tk.Label(head, text="Run Android apps on this PC", font=UI_FONT, fg=MUTED, bg=BG).pack(anchor="w")
 
+        nb = self.nb = ttk.Notebook(self)
+        nb.pack(fill="both", expand=True, padx=12, pady=(6, 0))
+        home = tk.Frame(nb, bg=BG)
+        adv = tk.Frame(nb, bg=BG)
+        nb.add(home, text="  Home  ")
+        nb.add(adv, text="  Advanced  ")
+        self.body = adv
+        self._build_home(home)
+        self._build_advanced()
+
+        self.bar = ttk.Progressbar(self, mode="determinate", style="Horizontal.TProgressbar")
+        self.bar.pack(fill="x", padx=16, pady=(10, 2))
+        self.status_line = tk.Label(self, text="Ready", font=UI_FONT, fg=FG, bg=BG, anchor="w")
+        self.status_line.pack(fill="x", padx=16)
+        tk.Label(self, text="Some apps refuse to run in virtual machines. That is their choice.",
+                 font=("Segoe UI", 8), fg=MUTED, bg=BG).pack(fill="x", padx=16, pady=(4, 10))
+
+    def _build_home(self, parent):
+        wrap = tk.Frame(parent, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=12, pady=12)
+
+        card = tk.Frame(wrap, bg=CARD, padx=22, pady=18)
+        card.pack(fill="x")
+        self.home_title = tk.Label(card, text="Checking your PC...", font=("Segoe UI", 16, "bold"),
+                                   fg=FG, bg=CARD, anchor="w")
+        self.home_title.pack(fill="x")
+        self.home_hint = tk.Label(card, text="", font=UI_FONT, fg=MUTED, bg=CARD, anchor="w",
+                                  justify="left", wraplength=780)
+        self.home_hint.pack(fill="x", pady=(6, 14))
+        row = tk.Frame(card, bg=CARD)
+        row.pack(fill="x")
+        self.home_primary = tk.Button(row, text="Please wait", font=("Segoe UI", 13, "bold"), bg=GREEN,
+                                      fg="#0b0c0e", activebackground=GREEN, relief="flat", padx=26,
+                                      pady=10, cursor="hand2", state="disabled")
+        self.home_primary.pack(side="left")
+        self.home_stop = tk.Button(row, text="Stop Android", font=UI_BOLD, bg=CARD, fg=FG,
+                                   activebackground=BG, relief="flat", padx=16, pady=10, cursor="hand2",
+                                   command=self.home_stop_android)
+        self.home_stop.pack(side="left", padx=12)
+        self.home_stop.pack_forget()
+
+        tk.Label(wrap, text="APPS AND HELP", font=("Segoe UI", 8, "bold"), fg=MUTED, bg=BG
+                 ).pack(anchor="w", padx=4, pady=(18, 4))
+        grid = tk.Frame(wrap, bg=BG)
+        grid.pack(fill="x")
+        tiles = [
+            ("Install an app from a file", "Pick an .apk file. Then open Files in Android to install it.",
+             self.home_install_apk, "apk"),
+            ("Google Play", "How to add the Play Store. Guided, not automatic yet.",
+             self.home_playstore, "play"),
+            ("Screenshot", "Save a picture of the Android screen.", self.home_screenshot, "shot"),
+            ("Shared folder", "Files you put here show up in Android as USB storage.",
+             self.home_shared, "shared"),
+            ("How to use", "Plain steps for everything in this app.", self.home_help, "help"),
+        ]
+        self.home_tiles: dict[str, tk.Button] = {}
+        for i, (title, desc, cmd, key) in enumerate(tiles):
+            b = tk.Button(grid, text=f"{title}\n{desc}", command=cmd, font=UI_FONT, bg=CARD, fg=FG,
+                          activebackground=BG, activeforeground=FG, relief="flat", bd=0, padx=16,
+                          pady=14, justify="left", anchor="w", wraplength=330, cursor="hand2")
+            b.grid(row=i // 2, column=i % 2, sticky="ew", padx=5, pady=5)
+            self.home_tiles[key] = b
+        grid.columnconfigure(0, weight=1)
+        grid.columnconfigure(1, weight=1)
+
+    def _build_advanced(self):
         status = self._card("Engine")
         self.rows: dict[str, tuple[tk.Label, tk.Label]] = {}
         for key, title in [("engine", "QEMU engine"), ("accel", "Hardware acceleration"),
@@ -227,20 +357,131 @@ class App(tk.Tk):
             grid.columnconfigure(c, weight=1)
         self.btn["start"].config(bg=GREEN, fg="#0b0c0e", activebackground=GREEN)
 
-        self.bar = ttk.Progressbar(self, mode="determinate", style="Horizontal.TProgressbar")
-        self.bar.pack(fill="x", padx=16, pady=(10, 2))
-        self.status_line = tk.Label(self, text="Ready", font=UI_FONT, fg=FG, bg=BG, anchor="w")
-        self.status_line.pack(fill="x", padx=16)
-
         logcard = self._card("Log", expand=True)
         self.log = tk.Text(logcard, height=6, bg="#111317", fg=MUTED, font=LOG_FONT,
                            relief="flat", wrap="word", state="disabled", bd=0)
         self.log.pack(fill="both", expand=True)
 
-        tk.Label(self, text="Google Play apps need a GApps install inside the VM (see README). "
-                            "Some apps refuse to run in virtual machines; that is their choice.",
-                 font=("Segoe UI", 8), fg=MUTED, bg=BG, wraplength=860,
-                 justify="left").pack(fill="x", padx=16, pady=(4, 10))
+
+
+    # ---------- Home tab ----------
+    HOME_STATES = {
+        "setup": ("Set up Android Lite",
+                  "One time only. Downloads about 1 GB: the Android image and the virtual machine engine "
+                  "(QEMU). Needs an internet connection.",
+                  "Set up now", "home_setup"),
+        "install": ("Install Android",
+                    "Android is not on your virtual device yet. A short guided installer runs once, "
+                    "about 10 minutes. Click Install to see the steps first.",
+                    "Install Android", "home_install"),
+        "ready": ("Android is ready",
+                  "Open Android to use its apps. Add more apps from this tab.",
+                  "Open Android", "home_open"),
+        "running": ("Android is running",
+                    "Its window is open. Closing the window does not stop Android. "
+                    "Use Stop Android to shut it down.",
+                    "Show Android", "home_open"),
+    }
+
+    def _main(self) -> dict | None:
+        try:
+            return instances.get(self.items, "main")
+        except KeyError:
+            return None
+
+    def _home_state(self) -> str:
+        if self.busy:
+            return "busy"
+        if not core.find_qemu(self.p, self.settings) or not os.path.isfile(self.p["iso"]):
+            return "setup"
+        main = self._main()
+        if main is None:
+            return "setup"
+        if "main" in self.vms:
+            return "running"
+        if not core.is_installed(instances.resolve(self.p, main)["folder"]):
+            return "install"
+        return "ready"
+
+    def refresh_home(self):
+        if not hasattr(self, "home_primary"):
+            return
+        st = self._home_state()
+        if st == "busy":
+            title, hint, btn, cmd = "Working...", self.status_line.cget("text"), "Please wait", None
+        else:
+            title, hint, btn, cmd_name = self.HOME_STATES[st]
+            cmd = getattr(self, cmd_name)
+        self.home_title.config(text=title)
+        self.home_hint.config(text=hint)
+        self.home_primary.config(text=btn, command=cmd or (lambda: None),
+                                 state="normal" if cmd else "disabled")
+        if st == "running":
+            self.home_stop.pack(side="left", padx=12)
+        else:
+            self.home_stop.pack_forget()
+        idle = not self.busy
+        v = self.vms.get("main")
+        ready_window = bool(v and v["port"] is not None and not v["stopping"])
+        enabled = {
+            "apk": idle and st != "setup",
+            "play": True,
+            "shot": ready_window,
+            "shared": idle,
+            "help": True,
+        }
+        for key, btn_widget in self.home_tiles.items():
+            btn_widget.config(state="normal" if enabled[key] else "disabled")
+
+    def _select_main(self):
+        if self.tree.exists("main"):
+            self.tree.selection_set("main")
+
+    def home_setup(self):
+        if messagebox.askyesno("Set up Android Lite",
+                               "This downloads about 1 GB (the Android image and QEMU) and needs an "
+                               "internet connection.\n\nContinue?"):
+            self.on_setup()
+
+    def home_install(self):
+        self._select_main()
+        StepsDialog(self, "Install Android", "Installing Android, step by step", INSTALL_STEPS,
+                    action="Start the installer", on_action=self._install_main)
+
+    def _install_main(self):
+        self._select_main()
+        self.on_install()
+
+    def home_open(self):
+        self._select_main()
+        v = self.vms.get("main")
+        if v and v["port"] is not None:
+            self._open_viewer("main")
+        else:
+            self.on_start()
+
+    def home_stop_android(self):
+        self._select_main()
+        self.on_stop()
+
+    def home_install_apk(self):
+        self._select_main()
+        self.on_apk()
+
+    def home_playstore(self):
+        StepsDialog(self, "Google Play", "Adding Google Play", PLAY_STEPS,
+                    action="Open the shared folder", on_action=self.home_shared)
+
+    def home_shared(self):
+        self._select_main()
+        self.on_shared()
+
+    def home_screenshot(self):
+        self._select_main()
+        self.on_shot()
+
+    def home_help(self):
+        StepsDialog(self, "How to use", "How to use Android Lite", HELP_STEPS)
 
     # ---------- state helpers ----------
     def _sel_id(self) -> str | None:
@@ -335,6 +576,7 @@ class App(tk.Tk):
         b["apk"].config(state=en(bool(sel)))
         b["shared"].config(state=en(bool(sel)))
         b["setup"].config(state=en(idle))
+        self.refresh_home()
 
     # ---------- user actions ----------
     def _suggest_name(self) -> str:

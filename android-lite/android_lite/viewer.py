@@ -73,26 +73,27 @@ class Viewer(tk.Toplevel):
     def _build(self) -> None:
         bar = tk.Frame(self, bg=BAR)
         bar.pack(side="top", fill="x")
-        self._rec_btn = None
-        buttons = [
-            ("Vol -", lambda: self.volume("volumedown")),
-            ("Vol +", lambda: self.volume("volumeup")),
-            ("Mute", lambda: self.volume("audiomute")),
-            ("Fullscreen", self.toggle_fullscreen),
-            ("Map key", self.toggle_map_mode),
-            ("Keymap", self.open_keymap),
-            ("Record", self.toggle_record),
-            ("Macros", self.open_macros),
-            ("Screenshot", self.screenshot),
-        ]
-        for label, cmd in buttons:
-            b = tk.Button(bar, text=label, command=cmd, bg=BAR, fg=FG, activebackground="#343844",
-                          activeforeground=FG, relief="flat", padx=8, pady=3, takefocus=0)
-            b.pack(side="left", padx=(4, 0), pady=4)
-            if label == "Record":
-                self._rec_btn = b
-            if label == "Map key":
-                self._map_btn = b
+        for label, cmd in [("Fullscreen", self.toggle_fullscreen), ("Screenshot", self.screenshot)]:
+            tk.Button(bar, text=label, command=cmd, bg=BAR, fg=FG, activebackground="#343844",
+                      activeforeground=FG, relief="flat", padx=10, pady=4, takefocus=0
+                      ).pack(side="left", padx=(6, 0), pady=4)
+        more = tk.Menubutton(bar, text="More", bg=BAR, fg=FG, activebackground="#343844",
+                             activeforeground=FG, relief="flat", padx=10, pady=4, takefocus=0)
+        more.pack(side="left", padx=(6, 0), pady=4)
+        menu = tk.Menu(more, tearoff=0, bg=BAR, fg=FG, activebackground=ACCENT, activeforeground="black")
+        more.config(menu=menu)
+        menu.add_command(label="Volume up", command=lambda: self.volume("volumeup"))
+        menu.add_command(label="Volume down", command=lambda: self.volume("volumedown"))
+        menu.add_command(label="Mute", command=lambda: self.volume("audiomute"))
+        menu.add_separator()
+        menu.add_command(label="Map a key to a tap", command=self.toggle_map_mode)
+        self._map_idx = menu.index("end")
+        menu.add_command(label="Edit key taps", command=self.open_keymap)
+        menu.add_separator()
+        menu.add_command(label="Record a macro", command=self.toggle_record)
+        self._rec_idx = menu.index("end")
+        menu.add_command(label="Play a macro", command=self.open_macros)
+        self._menu = menu
         self.canvas = tk.Canvas(self, bg="black", highlightthickness=0, width=640, height=360,
                                 takefocus=1)
         self.canvas.pack(side="top", fill="both", expand=True)
@@ -301,14 +302,14 @@ class Viewer(tk.Toplevel):
             return
         self._map_mode = True
         self._map_key = None
-        self._map_btn.config(text="Cancel map", fg=ACCENT)
+        self._menu.entryconfig(self._map_idx, label="Cancel mapping")
         self.set_message("Press the key to map (Esc cancels)")
         self.canvas.focus_set()
 
     def _end_map_mode(self, message: str = "") -> None:
         self._map_mode = False
         self._map_key = None
-        self._map_btn.config(text="Map key", fg=FG)
+        self._menu.entryconfig(self._map_idx, label="Map a key to a tap")
         self.set_message(message)
 
     def _finish_map(self, x: float, y: float) -> None:
@@ -333,12 +334,12 @@ class Viewer(tk.Toplevel):
     def toggle_record(self) -> None:
         if self._recorder is None:
             self._recorder = automation.Recorder()
-            self._rec_btn.config(text="Stop", fg=ACCENT)
+            self._menu.entryconfig(self._rec_idx, label="Stop recording")
             self.set_message("Recording. Click 'Stop' when finished")
             return
         events = self._recorder.events
         self._recorder = None
-        self._rec_btn.config(text="Record", fg=FG)
+        self._menu.entryconfig(self._rec_idx, label="Record a macro")
         self.set_message("")
         if not events:
             self.set_message("Nothing was recorded")

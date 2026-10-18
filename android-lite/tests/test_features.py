@@ -278,6 +278,43 @@ class ViewerTests(unittest.TestCase):
         finally:
             win.close()
 
+    def test_toolbar_shows_two_buttons_and_a_more_menu(self):
+        win, _ = self._viewer()
+        try:
+            widgets = []
+
+            def walk(w):
+                for c in w.winfo_children():
+                    widgets.append(c)
+                    walk(c)
+
+            walk(win)
+            kinds = {w.cget("text"): w.winfo_class() for w in widgets
+                     if w.winfo_class() in ("Button", "Menubutton")}
+            self.assertEqual(kinds.get("Fullscreen"), "Button")
+            self.assertEqual(kinds.get("Screenshot"), "Button")
+            self.assertEqual(kinds.get("More"), "Menubutton")
+            self.assertNotIn("Keymap", kinds)           # the extras live under More
+            labels = [win._menu.entrycget(i, "label") for i in range(win._menu.index("end") + 1)
+                      if win._menu.type(i) == "command"]
+            for want in ("Volume up", "Volume down", "Mute", "Map a key to a tap",
+                         "Edit key taps", "Record a macro", "Play a macro"):
+                self.assertIn(want, labels)
+        finally:
+            win.close()
+
+    def test_map_menu_label_follows_mode(self):
+        win, _ = self._viewer()
+        try:
+            label = lambda: win._menu.entrycget(win._map_idx, "label")
+            self.assertEqual(label(), "Map a key to a tap")
+            win.toggle_map_mode()
+            self.assertEqual(label(), "Cancel mapping")
+            win.toggle_map_mode()
+            self.assertEqual(label(), "Map a key to a tap")
+        finally:
+            win.close()
+
 
 @unittest.skipUnless(HAVE_DISPLAY and QEMU, "needs a display and QEMU")
 class ViewerEndToEndTests(unittest.TestCase):
@@ -342,3 +379,66 @@ class ViewerEndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_DISPLAY, "needs a display (Xvfb)")
+class InstalledMarkTests(unittest.TestCase):
+    """The installed.txt marker tells the Home tab that Android is ready to open."""
+
+    def test_mark_and_check(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            folder = os.path.join(tmp, "vm")
+            self.assertFalse(core.is_installed(folder))
+            core.mark_installed(folder)
+            self.assertTrue(core.is_installed(folder))
+            self.assertTrue(os.path.isfile(os.path.join(folder, core.INSTALLED_MARK)))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class HomeTabTests(unittest.TestCase):
+    """The Home tab's big button follows the state of the PC and of the main Android."""
+
+    def setUp(self):
+        from android_lite import gui
+        self.tmp = tempfile.mkdtemp()
+        self.p = config.paths(self.tmp)
+        self.app = gui.App(self.p)
+        self.app.withdraw()
+
+    def tearDown(self):
+        self.app.destroy()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_state_follows_setup_install_and_running(self):
+        app = self.app
+        app.settings = config.load_settings(self.p)
+        # no image yet: set up first
+        self.assertEqual(app._home_state(), "setup")
+        # image present, Android not installed: install
+        with open(self.p["iso"], "wb") as f:
+            f.write(b"not a real image, only for the state check")
+        self.assertEqual(app._home_state(), "install")
+        main = app._main()
+        core.mark_installed(instances.resolve(self.p, main)["folder"])
+        self.assertEqual(app._home_state(), "ready")
+        app.vms["main"] = {"proc": None, "port": 1, "paused": False, "stopping": False}
+        self.assertEqual(app._home_state(), "running")
+        app.vms.pop("main")
+        app.busy = True
+        self.assertEqual(app._home_state(), "busy")
+
+    def test_big_button_text_matches_state(self):
+        app = self.app
+        with open(self.p["iso"], "wb") as f:
+            f.write(b"x")
+        core.mark_installed(instances.resolve(self.p, app._main())["folder"])
+        app.refresh_home()
+        self.assertEqual(app.home_primary.cget("text"), "Open Android")
+        self.assertEqual(app.home_title.cget("text"), "Android is ready")
+
+    def test_steps_dialog_builds(self):
+        from android_lite import gui
+        dlg = gui.StepsDialog(self.app, "t", "h", ["one", "two"], action="Go", on_action=lambda: None)
+        dlg.destroy()
